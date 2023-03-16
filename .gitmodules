@@ -1,0 +1,6 @@
+[submodule "persist.git"]
+	path = persist
+	url = https://github.com/float32/persist.git
+[submodule "crcany.git"]
+	path = crcany
+	url = https://github.com/madler/crcany.git
