@@ -91,7 +91,7 @@ int main(int argc, const char* argv[])
     persist::Result result;
 
     // Instantiate and initialize Persist for version 1.
-    persist::Persist<FileMemory, SaveData1, 0> persist1{nvmem};
+    persist::Persist<FileMemory, SaveData1, 1> persist1{nvmem};
     result = persist1.Init();
     assert(result == persist::RESULT_SUCCESS);
 
