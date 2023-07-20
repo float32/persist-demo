@@ -21,6 +21,7 @@
 // SOFTWARE.
 
 #include <cstdint>
+#include <cstring>
 #include <random>
 #include <set>
 #include <vector>
@@ -29,6 +30,7 @@
 #include <gtest/gtest.h>
 
 #include "persist/persist.h"
+#include "util/ram_memory.h"
 
 namespace persist::test
 {
@@ -535,6 +537,45 @@ TYPED_TEST(PersistTest, SameData)
         // Write count should not increase
         ASSERT_EQ(this->mem_.write_count_, write_count);
     }
+}
+
+
+
+TEST(PersistTest, SequenceNumberWrap)
+{
+    // Make the memory large enough to hold the maximum number of Blocks
+    using MemType = demo::RamMemory<1024 * 1024>;
+    using PersistType = Persist<MemType, int32_t, 0>;
+
+    // Allocate on the heap to prevent segfault
+    MemType& memory = *(new MemType);
+    memory.Init();
+    PersistType persist{memory};
+
+    persist::Result result = persist.Init();
+    ASSERT_EQ(result, persist::RESULT_SUCCESS);
+
+    for (int32_t i = 0; i < 10000000; i++)
+    {
+        // Write data to memory
+        result = persist.Save(i);
+        ASSERT_EQ(result, persist::RESULT_SUCCESS);
+
+        // Read and verify data every time the maximum number of Blocks were
+        // written
+        if ((i & 0x7FFF) == 0)
+        {
+            PersistType read_persist{memory};
+            result = read_persist.Init();
+            ASSERT_EQ(result, persist::RESULT_SUCCESS);
+            int32_t data = -1;
+            result = read_persist.Load(data);
+            ASSERT_EQ(result, persist::RESULT_SUCCESS);
+            ASSERT_EQ(data, i);
+        }
+    }
+
+    delete &memory;
 }
 
 }
