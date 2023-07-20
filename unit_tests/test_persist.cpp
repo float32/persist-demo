@@ -578,4 +578,173 @@ TEST(PersistTest, SequenceNumberWrap)
     delete &memory;
 }
 
+
+
+class PersistLegacyTest : public ::testing::Test
+{
+public:
+    static constexpr uint8_t kDefault1 = 0x12;
+    static constexpr uint8_t kDefault2 = 0x34;
+    static constexpr uint8_t kDefault3 = 0x56;
+
+    struct Data1
+    {
+        uint8_t byte;
+    };
+
+    struct Data2
+    {
+        uint8_t byte[2];
+        Data2() = default;
+        explicit Data2(const Data1& data1)
+        {
+            byte[0] = data1.byte;
+            byte[1] = kDefault2;
+        }
+    };
+
+    struct Data3
+    {
+        uint8_t byte[3];
+        Data3() = default;
+        explicit Data3(const Data2& data2)
+        {
+            byte[0] = data2.byte[0];
+            byte[1] = data2.byte[1];
+            byte[2] = kDefault3;
+        }
+    };
+
+    using NVMem = Memory<1024, 16, 1>;
+    NVMem nvmem;
+
+    using Persist1 = Persist<NVMem, Data1, 1>;
+    using Persist2 = Persist<NVMem, Data2, 2>;
+    using Persist3 = Persist<NVMem, Data3, 3>;
+
+    Persist1 persist1{nvmem};
+    Persist2 persist2{nvmem};
+    Persist3 persist3{nvmem};
+
+    Data1 data1;
+    Data2 data2;
+    Data3 data3;
+
+    void SetUp() override
+    {
+        nvmem.Init();
+    }
+};
+
+TEST_F(PersistLegacyTest, FailLoad2)
+{
+    Result result;
+
+    result = persist2.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    result = persist2.LoadLegacy<Persist1>(data2);
+    ASSERT_EQ(result, RESULT_FAIL_NO_DATA);
+}
+
+TEST_F(PersistLegacyTest, FailLoad3)
+{
+    Result result;
+
+    result = persist3.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    result = persist3.LoadLegacy<Persist2, Persist1>(data3);
+    ASSERT_EQ(result, RESULT_FAIL_NO_DATA);
+}
+
+TEST_F(PersistLegacyTest, Load2From1)
+{
+    Result result;
+
+    result = persist1.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    data1.byte = kDefault1;
+    result = persist1.Save(data1);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+
+    result = persist2.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    result = persist2.Load(data2);
+    ASSERT_EQ(result, RESULT_FAIL_NO_DATA);
+    result = persist2.LoadLegacy<Persist1>(data2);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    ASSERT_EQ(data2.byte[0], kDefault1);
+    ASSERT_EQ(data2.byte[1], kDefault2);
+}
+
+TEST_F(PersistLegacyTest, Load3From1)
+{
+    Result result;
+
+    result = persist1.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    data1.byte = kDefault1;
+    result = persist1.Save(data1);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+
+    result = persist3.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    result = persist3.Load(data3);
+    ASSERT_EQ(result, RESULT_FAIL_NO_DATA);
+    result = persist3.LoadLegacy<Persist2, Persist1>(data3);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    ASSERT_EQ(data3.byte[0], kDefault1);
+    ASSERT_EQ(data3.byte[1], kDefault2);
+    ASSERT_EQ(data3.byte[2], kDefault3);
+}
+
+TEST_F(PersistLegacyTest, Load3From2)
+{
+    Result result;
+
+    result = persist2.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    data2.byte[0] = 0xFF - kDefault1;
+    data2.byte[1] = 0xFF - kDefault2;
+    result = persist2.Save(data2);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+
+    result = persist3.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    result = persist3.Load(data3);
+    ASSERT_EQ(result, RESULT_FAIL_NO_DATA);
+    result = persist3.LoadLegacy<Persist2, Persist1>(data3);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    ASSERT_EQ(data3.byte[0], 0xFF - kDefault1);
+    ASSERT_EQ(data3.byte[1], 0xFF - kDefault2);
+    ASSERT_EQ(data3.byte[2], kDefault3);
+}
+
+TEST_F(PersistLegacyTest, Load3From2SavedOver1)
+{
+    Result result;
+
+    result = persist1.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    data1.byte = kDefault1;
+    result = persist1.Save(data1);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+
+    result = persist2.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    data2.byte[0] = 0xFF - kDefault1;
+    data2.byte[1] = 0xFF - kDefault2;
+    result = persist2.Save(data2);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+
+    result = persist3.Init();
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    result = persist3.Load(data3);
+    ASSERT_EQ(result, RESULT_FAIL_NO_DATA);
+    result = persist3.LoadLegacy<Persist2, Persist1>(data3);
+    ASSERT_EQ(result, RESULT_SUCCESS);
+    ASSERT_EQ(data3.byte[0], 0xFF - kDefault1);
+    ASSERT_EQ(data3.byte[1], 0xFF - kDefault2);
+    ASSERT_EQ(data3.byte[2], kDefault3);
+}
+
 }
